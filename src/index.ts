@@ -56,9 +56,9 @@ function printBanner(cwd: string, git: GitContext, model: string): void {
   console.log(`${DIM}${"─".repeat(52)}${RESET}`);
   console.log();
   console.log(`  Type a task and press ${BOLD}Enter${RESET}. The agent will`);
-  console.log(`  read your code, make changes, commit, and more.`);
+  console.log(`  read your code, make changes, search the web, and more.`);
   console.log();
-  console.log(`  ${DIM}Commands:  /commit  /pr  /status  /model  /help  /quit${RESET}`);
+  console.log(`  ${DIM}Commands:  /commit  /pr  /status  /search  /model  /help  /quit${RESET}`);
   console.log();
 }
 
@@ -71,11 +71,13 @@ ${BOLD}Tasks${RESET}
     ${DIM}>${RESET} Fix the bug where users can't log out
     ${DIM}>${RESET} Refactor the database module to use connection pooling
     ${DIM}>${RESET} Write tests for the auth middleware
+    ${DIM}>${RESET} Look up the latest React Router API and update our routes
 
 ${BOLD}Commands${RESET}
   ${CYAN}/commit${RESET} ${DIM}[message]${RESET}  Stage & commit changes (auto-generates message if omitted)
   ${CYAN}/pr${RESET} ${DIM}[title]${RESET}      Push branch & create a pull request
   ${CYAN}/status${RESET}          Show git status
+  ${CYAN}/search${RESET} ${DIM}<query>${RESET}  Search the web for docs, APIs, or solutions
   ${CYAN}/model${RESET} ${DIM}[name]${RESET}    Show or change the model
   ${CYAN}/help${RESET}            Show this help
   ${CYAN}/quit${RESET}            Exit
@@ -118,6 +120,11 @@ function buildSlashPrompt(input: string, git: GitContext): string | null {
 
     case "/status":
       return "Run `git status` and `git log --oneline -5` and show me the output.";
+
+    case "/search": {
+      if (!arg) return "Ask me what to search for — I can look up documentation, APIs, error messages, and more on the web.";
+      return `Search the web for: "${arg}". Summarize the most relevant results and suggest how they apply to this project.`;
+    }
 
     default:
       return null;

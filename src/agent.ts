@@ -85,12 +85,14 @@ export async function runAgent(
       append: [
         "You are an autonomous coding agent.",
         "You can read, write, and edit files, run shell commands, search code, and manage git workflows.",
+        "You can also search the web with WebSearch and fetch web pages with WebFetch to look up documentation, APIs, error messages, and current best practices.",
         "When you finish a task, provide a concise summary of what you changed.",
       ].join(" "),
     },
     allowedTools: [
       "Read", "Write", "Edit", "Bash",
       "Glob", "Grep", "Task", "TodoWrite",
+      "WebSearch", "WebFetch",
     ],
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
@@ -141,6 +143,10 @@ function formatToolDetail(name: string, input: Record<string, unknown>): string 
       return input.pattern ? ` ${String(input.pattern)}` : "";
     case "Grep":
       return input.pattern ? ` /${String(input.pattern)}/` : "";
+    case "WebSearch":
+      return input.query ? ` "${String(input.query).slice(0, 80)}"` : "";
+    case "WebFetch":
+      return input.url ? ` ${String(input.url).slice(0, 80)}` : "";
     default:
       return "";
   }
