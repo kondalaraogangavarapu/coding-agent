@@ -7,7 +7,8 @@ An autonomous coding agent that writes/updates code, commits changes, and create
 - **Interactive REPL** — Just run `coding-agent` in your repo and start typing tasks
 - **Write & update code** — Describe what you want and the agent implements it
 - **Git workflow** — `/commit` and `/pr` commands for staging, committing, pushing, and PRs
-- **Full Claude Code toolset** — File read/write/edit, bash execution, glob/grep search
+- **Web search** — Agent can search the web and fetch pages for docs, APIs, and solutions
+- **Full Claude Code toolset** — File read/write/edit, bash execution, glob/grep search, web search/fetch
 - **Git-aware** — Auto-detects branch, status, and repo context on startup
 
 ## Prerequisites
@@ -44,9 +45,9 @@ You'll see a welcome screen with your repo context, then a prompt:
 ────────────────────────────────────────────────────
 
   Type a task and press Enter. The agent will
-  read your code, make changes, commit, and more.
+  read your code, make changes, search the web, and more.
 
-  Commands:  /commit  /pr  /status  /model  /help  /quit
+  Commands:  /commit  /pr  /status  /search  /model  /help  /quit
 
 > Add input validation to the signup form
 ```
@@ -60,6 +61,7 @@ Type any coding task in plain English:
 > Fix the bug where users can't log out
 > Refactor the database module to use connection pooling
 > Write tests for the auth middleware
+> Look up the latest React Router API and update our routes
 ```
 
 ### Commands
@@ -69,6 +71,7 @@ Type any coding task in plain English:
 | `/commit [message]` | Stage all changes & commit (auto-generates message if omitted) |
 | `/pr [title]` | Push branch & create a pull request |
 | `/status` | Show git status and recent commits |
+| `/search <query>` | Search the web for docs, APIs, or solutions |
 | `/model [name]` | Show or change the Claude model |
 | `/help` | Show help |
 | `/quit` | Exit |
@@ -94,7 +97,7 @@ src/
 1. On startup, `detectGitContext()` reads the repo's branch, last commit, dirty status, and remote URL
 2. The REPL loop reads user input — plain text becomes a task, `/commands` get converted to structured prompts
 3. `runAgent()` calls the Claude Agent SDK `query()` function, streaming tool calls and text in real time
-4. The agent has access to `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `Task`, and `TodoWrite` tools
+4. The agent has access to `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `Task`, `TodoWrite`, `WebSearch`, and `WebFetch` tools
 5. Results are printed with cost/turn/duration stats
 
 ## Programmatic Usage
