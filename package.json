@@ -1,0 +1,29 @@
+{
+  "name": "coding-agent",
+  "version": "1.0.0",
+  "description": "An autonomous coding agent that writes/updates code, commits changes, and raises PRs using the Claude Agent SDK",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "coding-agent": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:23379/git/kondalaraogangavarapu/coding-agent"
+  },
+  "keywords": ["ai", "agent", "claude", "coding", "automation"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.42"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
+}
