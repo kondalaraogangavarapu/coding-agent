@@ -4,108 +4,107 @@ An autonomous coding agent that writes/updates code, commits changes, and create
 
 ## Features
 
-- **Write & update code** — Describe what you want and the agent implements it autonomously
-- **Git workflow** — Automatically stages, commits, and pushes changes
-- **Pull requests** — Creates PRs with title/body via `gh` CLI
+- **Interactive REPL** — Just run `coding-agent` in your repo and start typing tasks
+- **Write & update code** — Describe what you want and the agent implements it
+- **Git workflow** — `/commit` and `/pr` commands for staging, committing, pushing, and PRs
 - **Full Claude Code toolset** — File read/write/edit, bash execution, glob/grep search
-- **Configurable** — Control model, budget, turn limits, and verbosity
+- **Git-aware** — Auto-detects branch, status, and repo context on startup
 
 ## Prerequisites
 
 - Node.js 18+
-- An [Anthropic API key](https://console.anthropic.com/)
-- `gh` CLI (optional, for creating pull requests)
+- [Anthropic API key](https://console.anthropic.com/)
+- `gh` CLI (optional, for `/pr` command)
 
 ## Setup
 
 ```bash
-# Clone and install
-git clone <repo-url> && cd coding-agent
 npm install
-
-# Build
 npm run build
-
-# Set your API key
 export ANTHROPIC_API_KEY=your-api-key
 ```
 
 ## Usage
 
 ```bash
-# Simple code task
-node dist/index.js --task "Add input validation to the signup form" --verbose
-
-# Full workflow: code, commit, and PR
-node dist/index.js \
-  --task "Add rate limiting to the API endpoints" \
-  --branch "feature/rate-limiting" \
-  --commit-msg "feat: add rate limiting to API endpoints" \
-  --create-pr \
-  --pr-title "Add rate limiting" \
-  --verbose
-
-# Direct prompt (full control over what the agent does)
-node dist/index.js --prompt "Read main.py and add type hints to all functions, then commit." --verbose
+# Start the interactive agent in your project directory
+cd your-project
+coding-agent
 ```
 
-## CLI Options
+You'll see a welcome screen with your repo context, then a prompt:
 
-| Option | Short | Description |
-|---|---|---|
-| `--task <text>` | `-t` | High-level task description |
-| `--prompt <text>` | `-p` | Raw prompt sent directly to the agent |
-| `--cwd <path>` | `-d` | Working directory (default: current directory) |
-| `--branch <name>` | `-b` | Git branch to create/switch to |
-| `--commit-msg <msg>` | `-m` | Commit message |
-| `--create-pr` | | Create a PR after committing |
-| `--pr-title <text>` | | PR title |
-| `--pr-body <text>` | | PR body/description |
-| `--base-branch <name>` | | Base branch for PR (default: `main`) |
-| `--model <id>` | | Claude model (default: `claude-sonnet-4-5-20250929`) |
-| `--max-turns <n>` | | Max conversation turns (default: 50) |
-| `--max-budget <usd>` | | Max budget in USD |
-| `--verbose` | `-v` | Print streaming output |
-| `--help` | `-h` | Show help |
+```
+  coding-agent  — autonomous coding with Claude
+────────────────────────────────────────────────────
+  dir     your-project/
+  branch  main
+  commit  a1b2c3d latest commit message
+  model   claude-sonnet-4-5-20250929
+────────────────────────────────────────────────────
+
+  Type a task and press Enter. The agent will
+  read your code, make changes, commit, and more.
+
+  Commands:  /commit  /pr  /status  /model  /help  /quit
+
+> Add input validation to the signup form
+```
+
+### Tasks
+
+Type any coding task in plain English:
+
+```
+> Add input validation to the signup form
+> Fix the bug where users can't log out
+> Refactor the database module to use connection pooling
+> Write tests for the auth middleware
+```
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `/commit [message]` | Stage all changes & commit (auto-generates message if omitted) |
+| `/pr [title]` | Push branch & create a pull request |
+| `/status` | Show git status and recent commits |
+| `/model [name]` | Show or change the Claude model |
+| `/help` | Show help |
+| `/quit` | Exit |
+
+### Startup Flags
+
+```bash
+coding-agent --model claude-opus-4-20250514  # Use a different model
+coding-agent --max-turns 100                  # Allow more turns per task
+coding-agent --max-budget 5.00                # Cap spend at $5 per task
+```
 
 ## Architecture
 
 ```
 src/
-├── index.ts    # CLI entry point with argument parsing
-└── agent.ts    # Core agent logic using Claude Agent SDK
+├── index.ts    # Interactive REPL with slash commands
+└── agent.ts    # Core agent logic, git context detection, streaming output
 ```
 
 ### How it works
 
-1. **`index.ts`** parses CLI arguments, validates inputs, and builds configuration
-2. **`agent.ts`** contains two key exports:
-   - `buildCodingPrompt()` — Constructs a structured prompt from task parameters (branch, commit message, PR details)
-   - `runAgent()` — Invokes the Claude Agent SDK's `query()` function, streaming messages and returning the final result
-
-The agent uses Claude Code's built-in tools (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `Task`, `TodoWrite`) to autonomously explore the codebase, implement changes, and run git/gh commands.
+1. On startup, `detectGitContext()` reads the repo's branch, last commit, dirty status, and remote URL
+2. The REPL loop reads user input — plain text becomes a task, `/commands` get converted to structured prompts
+3. `runAgent()` calls the Claude Agent SDK `query()` function, streaming tool calls and text in real time
+4. The agent has access to `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `Task`, and `TodoWrite` tools
+5. Results are printed with cost/turn/duration stats
 
 ## Programmatic Usage
 
-You can also use the agent as a library:
-
 ```typescript
-import { runAgent, buildCodingPrompt } from "./agent.js";
+import { runAgent, printResult } from "./agent.js";
 
-const prompt = buildCodingPrompt({
-  task: "Fix the login bug where sessions expire too early",
-  branch: "fix/session-expiry",
-  commitMessage: "fix: extend session TTL to 24 hours",
-  createPr: true,
-  prTitle: "Fix session expiry bug",
-});
-
-const result = await runAgent(prompt, {
+const result = await runAgent("Fix the login bug", {
   cwd: "/path/to/project",
-  verbose: true,
 });
 
-if (result?.subtype === "success") {
-  console.log("Done:", result.result);
-}
+if (result) printResult(result);
 ```

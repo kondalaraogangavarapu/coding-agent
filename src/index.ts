@@ -1,166 +1,229 @@
 #!/usr/bin/env node
 
+import * as readline from "node:readline/promises";
+import { stdin, stdout } from "node:process";
+import { basename } from "node:path";
 import { parseArgs } from "node:util";
-import { resolve } from "node:path";
-import { runAgent, buildCodingPrompt } from "./agent.js";
+import { detectGitContext, runAgent, printResult, type GitContext } from "./agent.js";
 
-function printUsage(): void {
-  console.log(`
-coding-agent - An autonomous coding agent powered by Claude
+// ── ANSI ────────────────────────────────────────────────────────────────────
+const DIM = "\x1b[2m";
+const RESET = "\x1b[0m";
+const BOLD = "\x1b[1m";
+const CYAN = "\x1b[36m";
+const GREEN = "\x1b[32m";
+const YELLOW = "\x1b[33m";
+const RED = "\x1b[31m";
+const BLUE = "\x1b[34m";
+const MAGENTA = "\x1b[35m";
 
-USAGE:
-  coding-agent --task <description> [options]
-  coding-agent --prompt <raw-prompt> [options]
-
-REQUIRED (one of):
-  --task, -t <text>       High-level task description (agent builds the full prompt)
-  --prompt, -p <text>     Raw prompt sent directly to the agent
-
-OPTIONS:
-  --cwd, -d <path>        Working directory (default: current directory)
-  --branch, -b <name>     Git branch to create/switch to before committing
-  --commit-msg, -m <msg>  Commit message (default: "Implement requested changes")
-  --create-pr             Create a pull request after committing
-  --pr-title <text>       Pull request title
-  --pr-body <text>        Pull request body/description
-  --base-branch <name>    Base branch for PR (default: "main")
-  --model <id>            Claude model to use (default: claude-sonnet-4-5-20250929)
-  --max-turns <n>         Max conversation turns (default: 50)
-  --max-budget <usd>      Max budget in USD
-  --verbose, -v           Print agent streaming output
-  --help, -h              Show this help message
-
-ENVIRONMENT:
-  ANTHROPIC_API_KEY       Required. Your Anthropic API key.
-
-EXAMPLES:
-  # Simple code task
-  coding-agent --task "Add input validation to the signup form" --verbose
-
-  # Full workflow: code, commit, and PR
-  coding-agent \\
-    --task "Add rate limiting to the API endpoints" \\
-    --branch "feature/rate-limiting" \\
-    --commit-msg "feat: add rate limiting to API endpoints" \\
-    --create-pr \\
-    --pr-title "Add rate limiting" \\
-    --verbose
-
-  # Direct prompt (full control)
-  coding-agent --prompt "Read main.py and add type hints to all functions. Then commit." --verbose
-`);
-}
-
-async function main(): Promise<void> {
-  let parsed;
+// ── Parse optional flags ────────────────────────────────────────────────────
+function parseFlags() {
   try {
-    parsed = parseArgs({
+    return parseArgs({
       options: {
-        task: { type: "string", short: "t" },
-        prompt: { type: "string", short: "p" },
-        cwd: { type: "string", short: "d" },
-        branch: { type: "string", short: "b" },
-        "commit-msg": { type: "string", short: "m" },
-        "create-pr": { type: "boolean", default: false },
-        "pr-title": { type: "string" },
-        "pr-body": { type: "string" },
-        "base-branch": { type: "string" },
         model: { type: "string" },
         "max-turns": { type: "string" },
         "max-budget": { type: "string" },
-        verbose: { type: "boolean", short: "v", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
       strict: true,
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`Error: ${message}`);
-    console.error('Run "coding-agent --help" for usage information.');
-    process.exit(1);
-  }
-
-  const { values } = parsed;
-
-  if (values.help) {
-    printUsage();
-    process.exit(0);
-  }
-
-  if (!values.task && !values.prompt) {
-    console.error("Error: Either --task or --prompt is required.");
-    console.error('Run "coding-agent --help" for usage information.');
-    process.exit(1);
-  }
-
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
-    console.error("Get your API key at https://console.anthropic.com/");
-    process.exit(1);
-  }
-
-  const cwd = values.cwd ? resolve(values.cwd) : process.cwd();
-
-  // Build the prompt
-  let agentPrompt: string;
-  if (values.prompt) {
-    agentPrompt = values.prompt;
-  } else {
-    agentPrompt = buildCodingPrompt({
-      task: values.task!,
-      branch: values.branch,
-      commitMessage: values["commit-msg"],
-      createPr: values["create-pr"],
-      prTitle: values["pr-title"],
-      prBody: values["pr-body"],
-      baseBranch: values["base-branch"],
-    });
-  }
-
-  if (values.verbose) {
-    console.log("=".repeat(60));
-    console.log("Coding Agent Starting");
-    console.log("=".repeat(60));
-    console.log(`Working directory: ${cwd}`);
-    console.log(`Model: ${values.model || "claude-sonnet-4-5-20250929"}`);
-    if (values.branch) console.log(`Branch: ${values.branch}`);
-    if (values["create-pr"]) console.log("Will create PR: yes");
-    console.log("=".repeat(60));
-    console.log();
-  }
-
-  const result = await runAgent(agentPrompt, {
-    cwd,
-    model: values.model,
-    maxTurns: values["max-turns"] ? parseInt(values["max-turns"], 10) : undefined,
-    maxBudgetUsd: values["max-budget"] ? parseFloat(values["max-budget"]) : undefined,
-    verbose: values.verbose,
-  });
-
-  if (!result) {
-    console.error("Agent returned no result.");
-    process.exit(1);
-  }
-
-  if (result.subtype === "success") {
-    console.log("\n" + "=".repeat(60));
-    console.log("RESULT");
-    console.log("=".repeat(60));
-    console.log(result.result);
-    console.log("=".repeat(60));
-    console.log(`Turns: ${result.num_turns} | Cost: $${result.total_cost_usd.toFixed(4)}`);
-  } else {
-    console.error("\nAgent encountered an error:", result.subtype);
-    if ("errors" in result && result.errors) {
-      for (const err of result.errors) {
-        console.error(`  - ${err}`);
-      }
-    }
-    process.exit(1);
+    }).values;
+  } catch {
+    return { help: false } as Record<string, string | boolean | undefined>;
   }
 }
 
+// ── Welcome banner ──────────────────────────────────────────────────────────
+function printBanner(cwd: string, git: GitContext, model: string): void {
+  const dir = basename(cwd);
+  console.log();
+  console.log(`${BOLD}${CYAN}  coding-agent${RESET}  ${DIM}— autonomous coding with Claude${RESET}`);
+  console.log(`${DIM}${"─".repeat(52)}${RESET}`);
+  console.log(`  ${DIM}dir${RESET}     ${dir}/`);
+  if (git.isGitRepo) {
+    console.log(`  ${DIM}branch${RESET}  ${GREEN}${git.branch}${RESET}`);
+    if (git.lastCommit) {
+      console.log(`  ${DIM}commit${RESET}  ${git.lastCommit}`);
+    }
+    if (git.hasUncommitted) {
+      console.log(`  ${DIM}status${RESET}  ${YELLOW}uncommitted changes${RESET}`);
+    }
+  } else {
+    console.log(`  ${DIM}git${RESET}     ${YELLOW}not a git repo${RESET}`);
+  }
+  console.log(`  ${DIM}model${RESET}   ${model}`);
+  console.log(`${DIM}${"─".repeat(52)}${RESET}`);
+  console.log();
+  console.log(`  Type a task and press ${BOLD}Enter${RESET}. The agent will`);
+  console.log(`  read your code, make changes, commit, and more.`);
+  console.log();
+  console.log(`  ${DIM}Commands:  /commit  /pr  /status  /model  /help  /quit${RESET}`);
+  console.log();
+}
+
+function printHelp(): void {
+  console.log(`
+${BOLD}Tasks${RESET}
+  Just type what you want done in plain English:
+
+    ${DIM}>${RESET} Add input validation to the signup form
+    ${DIM}>${RESET} Fix the bug where users can't log out
+    ${DIM}>${RESET} Refactor the database module to use connection pooling
+    ${DIM}>${RESET} Write tests for the auth middleware
+
+${BOLD}Commands${RESET}
+  ${CYAN}/commit${RESET} ${DIM}[message]${RESET}  Stage & commit changes (auto-generates message if omitted)
+  ${CYAN}/pr${RESET} ${DIM}[title]${RESET}      Push branch & create a pull request
+  ${CYAN}/status${RESET}          Show git status
+  ${CYAN}/model${RESET} ${DIM}[name]${RESET}    Show or change the model
+  ${CYAN}/help${RESET}            Show this help
+  ${CYAN}/quit${RESET}            Exit
+
+${BOLD}Startup flags${RESET}
+  --model <id>        Claude model (default: claude-sonnet-4-5-20250929)
+  --max-turns <n>     Max turns per task (default: 50)
+  --max-budget <usd>  Max USD per task
+`);
+}
+
+// ── Slash commands ──────────────────────────────────────────────────────────
+function buildSlashPrompt(input: string, git: GitContext): string | null {
+  const parts = input.trim().split(/\s+/);
+  const cmd = parts[0]!.toLowerCase();
+  const arg = parts.slice(1).join(" ");
+
+  switch (cmd) {
+    case "/commit": {
+      const msg = arg || "auto-generate a concise commit message from the staged diff";
+      return [
+        `Run \`git add -A\` to stage all changes.`,
+        `Then commit with message: "${msg}".`,
+        arg ? "" : "Look at the diff to write a good commit message.",
+        `Show the resulting \`git log -1\` at the end.`,
+      ].filter(Boolean).join("\n");
+    }
+
+    case "/pr": {
+      const title = arg || "auto-generate a title from the commits on this branch";
+      return [
+        `Push the current branch to origin.`,
+        `Then create a pull request using \`gh pr create\`:`,
+        `  - Title: "${title}"`,
+        arg ? "" : "  - Generate the title and body from the branch commits.",
+        `  - Base: main`,
+        `If \`gh\` is unavailable, show the manual steps.`,
+      ].filter(Boolean).join("\n");
+    }
+
+    case "/status":
+      return "Run `git status` and `git log --oneline -5` and show me the output.";
+
+    default:
+      return null;
+  }
+}
+
+// ── Main loop ───────────────────────────────────────────────────────────────
+async function main(): Promise<void> {
+  const flags = parseFlags();
+
+  if (flags.help) {
+    printHelp();
+    process.exit(0);
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error(`${RED}Error: ANTHROPIC_API_KEY is not set.${RESET}`);
+    console.error(`Get your key at https://console.anthropic.com/`);
+    process.exit(1);
+  }
+
+  const cwd = process.cwd();
+  let model = (flags.model as string) || "claude-sonnet-4-5-20250929";
+  const maxTurns = flags["max-turns"] ? parseInt(flags["max-turns"] as string, 10) : 50;
+  const maxBudgetUsd = flags["max-budget"] ? parseFloat(flags["max-budget"] as string) : undefined;
+
+  const git = detectGitContext(cwd);
+  printBanner(cwd, git, model);
+
+  const rl = readline.createInterface({ input: stdin, output: stdout });
+  const prompt = `${BLUE}>${RESET} `;
+
+  let taskNum = 0;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let input: string;
+    try {
+      input = await rl.question(prompt);
+    } catch {
+      // ctrl-d / closed
+      break;
+    }
+
+    const trimmed = input.trim();
+    if (!trimmed) continue;
+
+    // ── built-in commands ──
+    if (trimmed === "/quit" || trimmed === "/exit" || trimmed === "/q") {
+      console.log(`${DIM}Goodbye.${RESET}`);
+      break;
+    }
+
+    if (trimmed === "/help" || trimmed === "/?") {
+      printHelp();
+      continue;
+    }
+
+    if (trimmed.startsWith("/model")) {
+      const arg = trimmed.slice(6).trim();
+      if (arg) {
+        model = arg;
+        console.log(`${DIM}Model set to ${model}${RESET}`);
+      } else {
+        console.log(`${DIM}Current model: ${model}${RESET}`);
+      }
+      continue;
+    }
+
+    // ── slash → prompt conversion ──
+    let agentPrompt: string;
+    if (trimmed.startsWith("/")) {
+      const converted = buildSlashPrompt(trimmed, git);
+      if (!converted) {
+        console.log(`${YELLOW}Unknown command: ${trimmed.split(/\s/)[0]}${RESET}`);
+        console.log(`${DIM}Type /help for available commands.${RESET}`);
+        continue;
+      }
+      agentPrompt = converted;
+    } else {
+      agentPrompt = trimmed;
+    }
+
+    taskNum++;
+    console.log(`\n${DIM}── task ${taskNum} ${"─".repeat(42)}${RESET}\n`);
+
+    const result = await runAgent(agentPrompt, {
+      cwd,
+      model,
+      maxTurns,
+      maxBudgetUsd,
+    });
+
+    if (result) {
+      printResult(result);
+    } else {
+      console.log(`${RED}No result returned from agent.${RESET}`);
+    }
+
+    console.log();
+  }
+
+  rl.close();
+}
+
 main().catch((err) => {
-  console.error("Fatal error:", err);
+  console.error(`${RED}Fatal:${RESET}`, err);
   process.exit(1);
 });
