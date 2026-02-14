@@ -58,7 +58,7 @@ function printBanner(cwd: string, git: GitContext, model: string): void {
   console.log(`  Type a task and press ${BOLD}Enter${RESET}. The agent will`);
   console.log(`  read your code, make changes, search the web, and more.`);
   console.log();
-  console.log(`  ${DIM}Commands:  /commit  /pr  /status  /search  /model  /help  /quit${RESET}`);
+  console.log(`  ${DIM}Commands:  /commit  /pr  /status  /search  /model  /help  /quit  or "exit"${RESET}`);
   console.log();
 }
 
@@ -80,7 +80,7 @@ ${BOLD}Commands${RESET}
   ${CYAN}/search${RESET} ${DIM}<query>${RESET}  Search the web for docs, APIs, or solutions
   ${CYAN}/model${RESET} ${DIM}[name]${RESET}    Show or change the model
   ${CYAN}/help${RESET}            Show this help
-  ${CYAN}/quit${RESET}            Exit
+  ${CYAN}/quit${RESET}            Exit (or just type "exit", "quit", "stop")
 
 ${BOLD}Startup flags${RESET}
   --model <id>        Claude model (default: claude-sonnet-4-5-20250929)
@@ -173,7 +173,15 @@ async function main(): Promise<void> {
     if (!trimmed) continue;
 
     // ── built-in commands ──
-    if (trimmed === "/quit" || trimmed === "/exit" || trimmed === "/q") {
+    // Check for exit/quit commands (both slash commands and natural language)
+    const lowerInput = trimmed.toLowerCase();
+    const exitPatterns = [
+      "/quit", "/exit", "/q",
+      "exit", "quit", "stop",
+      "exit agent", "quit agent", "stop agent",
+      "please exit", "please quit", "please stop"
+    ];
+    if (exitPatterns.some(pattern => lowerInput === pattern || lowerInput.startsWith(pattern + " "))) {
       console.log(`${DIM}Goodbye.${RESET}`);
       break;
     }
